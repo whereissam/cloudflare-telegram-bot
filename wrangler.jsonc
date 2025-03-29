@@ -4,13 +4,13 @@
  */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "testbot",
+	"name": "urltools",
 	"main": "src/index.js",
 	"compatibility_date": "2025-03-19",
 	"kv_namespaces": [
     {
       "binding": "shortener",
-      "id": "fb81b40f8a104ceab1cab2f377c56b83"
+      "id": "kv_id"
     }],
 	"observability": {
 		"enabled": true
