@@ -1,6 +1,6 @@
 import TelegramBot from 'telegram-webhook-js';
 
-// Store user states (for multi-step interactions)
+// Store user states (for multi-step interactions) 
 const userStates = {};
 
 addEventListener('fetch', event => {
@@ -8,14 +8,6 @@ addEventListener('fetch', event => {
 });
 
 async function handleRequest(request) {
-    // Initialize bot with environment variables
-    const bot = new TelegramBot(BOT_TOKEN);
-    
-    // Override the handleUpdate method
-    bot.handleUpdate = async function(update, request) {
-        return handleUpdate(update, request, bot);
-    };
-    
     const url = new URL(request.url);
     
     // Handle QR code image generation directly
@@ -54,8 +46,9 @@ async function handleRequest(request) {
     
     // Handle incoming webhook updates
     if (url.pathname === '/webhook') {
+        const bot = new TelegramBot(BOT_TOKEN);
         const updates = await request.json();
-        await bot.handleUpdate(updates, request);
+        await handleUpdate(updates, request, bot);
         return new Response('OK', { status: 200 });
     }
     
@@ -241,11 +234,12 @@ async function shortenAndSendUrl(chatId, originalUrl, request) {
 }
 
 async function handleUpdate(update, request, bot) {
-    const message = update.message;
-    if (!message || !message.text) return;
+    try {
+        const message = update.message;
+        if (!message || !message.text) return;
 
-    const chatId = message.chat.id;
-    const text = message.text.trim();
+        const chatId = message.chat.id;
+        const text = message.text.trim();
     
     // Handle user in waiting-for-url state
     if (userStates[chatId]) {
@@ -339,6 +333,14 @@ async function handleUpdate(update, request, bot) {
         );
     } else {
         await bot.sendMessage(chatId, 'Please send a valid URL to shorten or use /qrcode to generate a QR code.');
+    }
+    } catch (error) {
+        console.error('Error in handleUpdate:', error);
+        try {
+            await bot.sendMessage(update.message.chat.id, 'Sorry, an error occurred. Please try again.');
+        } catch (sendError) {
+            console.error('Error sending error message:', sendError);
+        }
     }
 }
 

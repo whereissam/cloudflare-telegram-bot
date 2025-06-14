@@ -6,7 +6,9 @@
       "Bash(wrangler login:*)",
       "Bash(wrangler deploy:*)",
       "Bash(wrangler secret put:*)",
-      "Bash(wrangler secret:*)"
+      "Bash(wrangler secret:*)",
+      "Bash(wrangler tail:*)",
+      "Bash(wrangler dev:*)"
     ],
     "deny": []
   }

@@ -181,6 +181,7 @@ npm test
    - Check if webhook URL is correct
    - Verify bot token is valid
    - Ensure webhook is set to correct endpoint
+   - Check worker logs for errors
 
 2. **KV namespace errors**
    - Verify namespace ID in wrangler.jsonc
@@ -190,17 +191,95 @@ npm test
    - Verify Google Safe Browsing API key is valid
    - Check API quotas and limits
 
+4. **Worker hanging/crashing**
+   - Check if secrets are properly configured
+   - Verify environment variables are accessible
+   - Test worker endpoint directly
+
 ### Debug Commands
 
-Check webhook status:
+**Check webhook status:**
 ```bash
 curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getWebhookInfo"
 ```
 
-Delete webhook (for testing):
+**Test bot token:**
+```bash
+curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getMe"
+```
+
+**Test worker endpoint:**
+```bash
+curl "https://your-worker-domain.workers.dev/"
+```
+
+**Test webhook endpoint:**
+```bash
+curl -X POST "https://your-worker-domain.workers.dev/webhook" \
+-H "Content-Type: application/json" \
+-d '{"message":{"text":"/start","chat":{"id":123}}}'
+```
+
+**Check worker logs:**
+```bash
+wrangler tail --format pretty
+```
+
+**List secrets:**
+```bash
+wrangler secret list
+```
+
+**Delete webhook (for testing):**
 ```bash
 curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/deleteWebhook"
 ```
+
+**Set webhook:**
+```bash
+curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
+-H "Content-Type: application/json" \
+-d '{"url": "https://your-worker-domain.workers.dev/webhook"}'
+```
+
+### Local Development Debug
+
+**Start local development:**
+```bash
+wrangler dev --local
+```
+
+**In another terminal, test local endpoint:**
+```bash
+curl "http://localhost:8787/"
+```
+
+**Use ngrok for webhook testing:**
+```bash
+# Terminal 1
+wrangler dev
+
+# Terminal 2  
+ngrok http 8787
+
+# Terminal 3 - Set webhook to ngrok URL
+curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
+-H "Content-Type: application/json" \
+-d '{"url": "https://your-ngrok-url.ngrok.io/webhook"}'
+```
+
+### Error Investigation
+
+**If worker returns 500 errors:**
+1. Check if BOT_TOKEN secret is set
+2. Verify telegram-webhook-js compatibility
+3. Check for syntax errors in code
+4. Test with minimal handler first
+
+**If webhook shows "pending_update_count" > 0:**
+1. There are unprocessed messages
+2. Worker might be failing to respond
+3. Check worker logs for errors
 
 ## Contributing
 
