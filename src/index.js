@@ -1,19 +1,21 @@
 import TelegramBot from 'telegram-webhook-js';
 
-const bot = new TelegramBot("YOUR_BOT_TOKEN");
-
 // Store user states (for multi-step interactions)
 const userStates = {};
-
-// Add your Google Safe Browsing API key here
-const GOOGLE_SAFE_BROWSING_API_KEY = "YOUR_SAFE_BROWSING_API_KEY";
-const SAFE_BROWSING_API_URL = "https://safebrowsing.googleapis.com/v4/threatMatches:find";
 
 addEventListener('fetch', event => {
     event.respondWith(handleRequest(event.request));
 });
 
 async function handleRequest(request) {
+    // Initialize bot with environment variables
+    const bot = new TelegramBot(BOT_TOKEN);
+    
+    // Override the handleUpdate method
+    bot.handleUpdate = async function(update, request) {
+        return handleUpdate(update, request, bot);
+    };
+    
     const url = new URL(request.url);
     
     // Handle QR code image generation directly
@@ -61,7 +63,7 @@ async function handleRequest(request) {
     if (url.pathname.length > 1) {
         const shortCode = url.pathname.slice(1);
         try {
-            const originalUrl = await shortener.get(shortCode);
+            const originalUrl = await shorturl.get(shortCode);
             if (originalUrl) {
                 return Response.redirect(originalUrl, 301);
             }
@@ -112,7 +114,7 @@ async function checkUrlSafety(url) {
             }
         };
 
-        const response = await fetch(`${SAFE_BROWSING_API_URL}?key=${GOOGLE_SAFE_BROWSING_API_KEY}`, {
+        const response = await fetch(`https://safebrowsing.googleapis.com/v4/threatMatches:find?key=${GOOGLE_API_KEY}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -225,7 +227,7 @@ async function shortenAndSendUrl(chatId, originalUrl, request) {
         const baseUrl = `${requestUrl.protocol}//${requestUrl.hostname}`;
         
         // Save the URL in KV
-        await shortener.put(shortCode, originalUrl);
+        await shorturl.put(shortCode, originalUrl);
         
         // Construct the shortened URL
         const shortUrl = `${baseUrl}/${shortCode}`;
@@ -238,7 +240,7 @@ async function shortenAndSendUrl(chatId, originalUrl, request) {
     }
 }
 
-async function handleUpdate(update, request) {
+async function handleUpdate(update, request, bot) {
     const message = update.message;
     if (!message || !message.text) return;
 
@@ -340,7 +342,3 @@ async function handleUpdate(update, request) {
     }
 }
 
-// A simple modification to pass the request object to handleUpdate
-bot.handleUpdate = async function(update, request) {
-    return handleUpdate(update, request);
-};

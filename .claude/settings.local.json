@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wrangler kv:namespace delete:*)",
+      "Bash(wrangler kv:*)",
+      "Bash(wrangler login:*)",
+      "Bash(wrangler deploy:*)",
+      "Bash(wrangler secret put:*)",
+      "Bash(wrangler secret:*)"
+    ],
+    "deny": []
+  }
+}
