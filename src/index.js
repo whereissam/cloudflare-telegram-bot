@@ -136,7 +136,7 @@ async function checkUrlSafety(url) {
 }
 
 // Generate QR code for a URL
-async function generateQrCode(chatId, urlToEncode) {
+async function generateQrCode(chatId, urlToEncode, bot) {
     try {
         // Check URL safety first
         const safetyCheck = await checkUrlSafety(urlToEncode);
@@ -171,7 +171,7 @@ async function generateQrCode(chatId, urlToEncode) {
 }
 
 // Check URL and report safety status to user
-async function checkAndReportUrlSafety(chatId, urlToCheck) {
+async function checkAndReportUrlSafety(chatId, urlToCheck, bot) {
     try {
         await bot.sendMessage(chatId, `🔍 Checking URL safety for: ${urlToCheck}`);
         
@@ -202,7 +202,7 @@ async function checkAndReportUrlSafety(chatId, urlToCheck) {
 }
 
 // Shorten a URL and send it to the user
-async function shortenAndSendUrl(chatId, originalUrl, request) {
+async function shortenAndSendUrl(chatId, originalUrl, request, bot) {
     try {
         // Check URL safety first
         const safetyCheck = await checkUrlSafety(originalUrl);
@@ -249,14 +249,14 @@ async function handleUpdate(update, request, bot) {
         
         if (state.waitingFor === 'qr_url') {
             if (isValidUrl(text)) {
-                await generateQrCode(chatId, text);
+                await generateQrCode(chatId, text, bot);
             } else {
                 await bot.sendMessage(chatId, 'Please provide a valid URL. Example: https://example.com');
             }
             return;
         } else if (state.waitingFor === 'check_url') {
             if (isValidUrl(text)) {
-                await checkAndReportUrlSafety(chatId, text);
+                await checkAndReportUrlSafety(chatId, text, bot);
             } else {
                 await bot.sendMessage(chatId, 'Please provide a valid URL. Example: https://example.com');
             }
@@ -281,7 +281,7 @@ async function handleUpdate(update, request, bot) {
             return;
         }
         
-        await generateQrCode(chatId, urlToEncode);
+        await generateQrCode(chatId, urlToEncode, bot);
         return;
     }
 
@@ -302,13 +302,13 @@ async function handleUpdate(update, request, bot) {
             return;
         }
         
-        await checkAndReportUrlSafety(chatId, urlToCheck);
+        await checkAndReportUrlSafety(chatId, urlToCheck, bot);
         return;
     }
     
     // URL shortening functionality
     if (isValidUrl(text)) {
-        await shortenAndSendUrl(chatId, text, request);
+        await shortenAndSendUrl(chatId, text, request, bot);
         return;
     }
 
