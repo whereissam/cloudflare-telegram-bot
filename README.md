@@ -5,17 +5,39 @@ A Telegram bot that provides URL shortening, QR code generation, and URL safety 
 ## Features
 
 - **URL Shortening**: Convert long URLs into short, shareable links
-- **QR Code Generation**: Create QR codes for any URL
-- **URL Safety Check**: Verify URLs using Google Safe Browsing API
+- **Advanced QR Code Generation**: Create styled QR codes with multiple design options
+  - 🔲 3 Different Styles: Classic Square, Rounded Corners, Circular Dots
+  - 🌈 8 Beautiful Color Schemes: Classic, Blue, Green, Purple, Red, Orange, Teal, Pink
+  - 🎨 Customizable User Preferences (persistent across sessions)
+  - 📱 High-quality PNG output optimized for sharing
+- **URL Safety Check**: Verify URLs using Google Safe Browsing API before processing
+- **Smart Fallback System**: Advanced QR generation with automatic fallback to basic version
+- **Multi-Step Interactions**: Interactive command flows for better user experience
 - **Edge Deployment**: Fast response times with Cloudflare Workers
 
 ## Commands
 
-- `/start` - Start the bot and see welcome message
-- `/help` - Show all available commands
-- `/qrcode [url]` - Generate a QR code for a URL
-- `/checkurl [url]` - Check if a URL is safe
+### 🚀 Basic Commands
+- `/start` - Welcome message and feature overview
+- `/help` - Complete command reference and usage tips
+
+### 🔗 URL Operations
+- `/qrcode [url]` - Generate a styled QR code for a URL
+- `/qrcode` - Interactive QR code generation (prompts for URL)
+- `/checkurl [url]` - Check if a URL is safe using Google Safe Browsing
+- `/checkurl` - Interactive URL safety check
 - Send any URL directly to get a shortened version
+
+### 🎨 QR Code Customization
+- `/qrstyle` (or `/qr_style`) - Choose QR code style (square/rounded/dots)
+- `/qrcolor` (or `/qr_color`) - Select color scheme from 8 options
+- `/qrsettings` (or `/qr_settings`) - View current QR customization settings
+- `/qrpreview` - Generate preview samples of all available styles
+
+### 💡 Pro Tips
+- Customize your QR style once, use forever - settings are remembered!
+- All URLs are automatically checked for safety before processing
+- QR codes include automatic fallback for maximum compatibility
 
 ## Setup
 
@@ -40,31 +62,39 @@ A Telegram bot that provides URL shortening, QR code generation, and URL safety 
    npm install
    ```
 
-3. **Configure secrets (SECURE)**
+3. **Authenticate with Cloudflare**
+   ```bash
+   # Option A: Browser login (recommended)
+   npx wrangler login
+   
+   # Option B: API token (if browser login fails)
+   export CLOUDFLARE_API_TOKEN="your-api-token"
+   ```
+
+4. **Configure secrets (SECURE)**
    
    **NEVER** put API keys in `wrangler.jsonc`. Use Wrangler secrets instead:
    ```bash
    # Set your bot token as a secret
-   echo "your-bot-token" | wrangler secret put BOT_TOKEN
+   echo "your-bot-token" | npx wrangler secret put BOT_TOKEN
    
    # Set your Google API key as a secret  
-   echo "your-google-api-key" | wrangler secret put GOOGLE_API_KEY
+   echo "your-google-api-key" | npx wrangler secret put GOOGLE_API_KEY
    ```
 
-4. **Set up KV namespace**
+5. **Set up KV namespace** (if not already created)
    ```bash
-   wrangler login
-   wrangler kv namespace create shorturl
+   npx wrangler kv namespace create shorturl
    ```
    
-   Update the namespace ID in `wrangler.jsonc`.
+   Update the namespace ID in `wrangler.jsonc` if needed.
 
-5. **Deploy to Cloudflare**
+6. **Deploy to Cloudflare**
    ```bash
-   wrangler deploy
+   npm run deploy
    ```
 
-6. **Set Telegram webhook**
+7. **Set Telegram webhook**
    ```bash
    curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
    -H "Content-Type: application/json" \
@@ -143,6 +173,29 @@ or
 ```
 Then send the URL when prompted.
 
+### QR Code Customization
+**Set your preferred style:**
+```
+/qrstyle
+```
+Choose from: square, rounded, dots
+
+**Set your preferred colors:**
+```
+/qrcolor
+```
+Choose from: classic, blue, green, purple, red, orange, teal, pink
+
+**View current settings:**
+```
+/qrsettings
+```
+
+**Preview all styles:**
+```
+/qrpreview
+```
+
 ## Security Features
 
 - **URL Safety Verification**: All URLs are checked against Google Safe Browsing API
@@ -169,9 +222,10 @@ npm test
 ```
 
 ### Scripts
-- `npm run dev` - Start local development
-- `npm run deploy` - Deploy to Cloudflare
-- `npm test` - Run tests
+- `npm run dev` - Start local development server
+- `npm run deploy` - Deploy to Cloudflare Workers
+- `npm run start` - Alias for dev (start local server)
+- `npm test` - Run test suite with Vitest
 
 ## Troubleshooting
 
@@ -227,7 +281,12 @@ wrangler tail --format pretty
 
 **List secrets:**
 ```bash
-wrangler secret list
+npx wrangler secret list
+```
+
+**Check authentication:**
+```bash
+npx wrangler whoami
 ```
 
 **Delete webhook (for testing):**

@@ -14,6 +14,8 @@
     "wrangler": "4.4.0"
   },
   "dependencies": {
-    "telegram-webhook-js": "^1.0.51"
+    "telegram-webhook-js": "^1.0.51",
+    "qr-code-styling": "^1.8.4",
+    "canvas": "^2.11.2"
   }
 }
