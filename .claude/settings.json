@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash(git commit*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/bug-review.sh",
+            "timeout": 30,
+            "statusMessage": "Running bug review on commit..."
+          }
+        ]
+      }
+    ]
+  }
+}

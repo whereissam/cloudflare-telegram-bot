@@ -8,15 +8,7 @@
       "Bash(wrangler secret put:*)",
       "Bash(wrangler secret:*)",
       "Bash(wrangler tail:*)",
-      "Bash(wrangler dev:*)",
-      "Bash(npm install:*)",
-      "Bash(npm test)",
-      "Bash(npm run dev:*)",
-      "Bash(node:*)",
-      "Bash(npx wrangler:*)",
-      "Bash(./node_modules/.bin/wrangler login)",
-      "Bash(npm run deploy:*)",
-      "Bash(npm run:*)"
+      "Bash(wrangler dev:*)"
     ],
     "deny": [],
     "additionalDirectories": [
