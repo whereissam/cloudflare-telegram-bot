@@ -25,15 +25,16 @@ if [ -z "$CODE_FILES" ]; then
 fi
 
 FILE_COUNT=$(echo "$CODE_FILES" | wc -l | tr -d ' ')
+DIFF_LINES=$(git diff "$COMMIT_HASH"~1 "$COMMIT_HASH" --stat 2>/dev/null | tail -1 | grep -oE '[0-9]+ insertion|[0-9]+ deletion' | awk '{s+=$1} END{print s+0}')
 
 # Output context as JSON for Claude to process
 cat <<EOF
 {
   "decision": "block",
-  "reason": "Bug review triggered for commit ${COMMIT_HASH:0:7}: '${COMMIT_MSG}'. ${FILE_COUNT} code file(s) changed. Please review the changes for bugs before continuing.",
+  "reason": "Bug review triggered for commit ${COMMIT_HASH:0:7}: '${COMMIT_MSG}'. ${FILE_COUNT} code file(s), ~${DIFF_LINES} lines changed. Please review the changes for bugs before continuing.",
   "hookSpecificOutput": {
     "hookEventName": "PostToolUse",
-    "additionalContext": "AUTO BUG REVIEW — Commit ${COMMIT_HASH:0:7}\n\nChanged code files:\n$(echo "$CODE_FILES" | sed 's/^/  - /')\n\nDiff summary:\n${DIFF}\n\nPlease run: git diff ${COMMIT_HASH}~1 ${COMMIT_HASH} -- <file> for each code file above, review for:\n1. Logic bugs, off-by-one errors, null/undefined issues\n2. Missing error handling or uncaught exceptions\n3. Security issues (injection, XSS, exposed secrets)\n4. Race conditions or async issues\n5. Type mismatches or wrong API contracts\n6. Broken imports or missing dependencies\n\nAfter reviewing, summarize any issues found or confirm the code looks clean."
+    "additionalContext": "AUTO BUG REVIEW — Commit ${COMMIT_HASH:0:7} (~${DIFF_LINES} lines changed)\n\nChanged code files (${FILE_COUNT}):\n$(echo "$CODE_FILES" | sed 's/^/  - /')\n\nDiff summary:\n${DIFF}\n\nPlease run: git diff ${COMMIT_HASH}~1 ${COMMIT_HASH} -- <file> for each code file above, review for:\n1. Logic bugs, off-by-one errors, null/undefined issues\n2. Missing error handling or uncaught exceptions\n3. Security issues (injection, XSS, exposed secrets)\n4. Race conditions or async issues\n5. Type mismatches or wrong API contracts\n6. Broken imports or missing dependencies\n\nAfter reviewing, summarize any issues found or confirm the code looks clean."
   }
 }
 EOF

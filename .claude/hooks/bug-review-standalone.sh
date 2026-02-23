@@ -30,17 +30,54 @@ fi
 FILE_COUNT=$(echo "$CHANGED_FILES" | wc -l | tr -d ' ')
 COMMIT_INFO=$($LOG_CMD 2>/dev/null)
 
-echo "Reviewing ${FILE_COUNT} file(s) from: ${COMMIT_INFO}"
+DIFF_LINES=$($DIFF_CMD --stat 2>/dev/null | tail -1 | grep -oE '[0-9]+ insertion|[0-9]+ deletion' | awk '{s+=$1} END{print s+0}')
+
+echo "Reviewing ${FILE_COUNT} file(s), ~${DIFF_LINES} changed lines"
+echo "Commit: ${COMMIT_INFO}"
+echo "Files:"
+echo "$CHANGED_FILES" | sed 's/^/  - /'
 echo "---"
 
-# Run Claude in headless mode for the review
-claude -p "$(cat <<EOF
+# Progress spinner runs in background
+spin_pid=""
+start_spinner() {
+  local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+  local start_time=$SECONDS
+  while true; do
+    local elapsed=$(( SECONDS - start_time ))
+    local mins=$(( elapsed / 60 ))
+    local secs=$(( elapsed % 60 ))
+    for frame in "${frames[@]}"; do
+      printf "\r  ${frame} Reviewing... %dm%02ds elapsed" "$mins" "$secs" >&2
+      sleep 0.1
+      elapsed=$(( SECONDS - start_time ))
+      mins=$(( elapsed / 60 ))
+      secs=$(( elapsed % 60 ))
+    done
+  done
+}
+stop_spinner() {
+  if [ -n "$spin_pid" ]; then
+    kill "$spin_pid" 2>/dev/null || true
+    wait "$spin_pid" 2>/dev/null || true
+    printf "\r%60s\r" "" >&2
+    spin_pid=""
+  fi
+}
+trap 'stop_spinner; rm -f "$PROMPT_FILE"' EXIT
+
+# Build the prompt in a temp file to avoid nested quoting issues
+PROMPT_FILE=$(mktemp)
+
+FILE_LIST=$(echo "$CHANGED_FILES" | sed 's/^/  - /')
+
+cat > "$PROMPT_FILE" <<EOF
 You are a senior code reviewer performing a bug review on a git commit.
 
 Commit: ${COMMIT_INFO}
 
 Changed files:
-$(echo "$CHANGED_FILES" | sed 's/^/  - /')
+${FILE_LIST}
 
 Instructions:
 1. Run \`$DIFF_CMD\` to see the full diff
@@ -67,9 +104,17 @@ Instructions:
 ### Verdict
 (CLEAN / NEEDS ATTENTION / HAS BUGS)
 
-If no issues found, say the code looks clean and explain why you're confident.
+If no issues found, say the code looks clean and explain why you are confident.
 EOF
-)" --allowedTools "Bash(git diff*),Bash(git log*),Bash(git show*),Read,Glob,Grep" --max-turns 15
 
+# Run Claude in headless mode with progress spinner
+start_spinner &
+spin_pid=$!
+
+REVIEW_OUTPUT=$(claude -p "$(cat "$PROMPT_FILE")" --allowedTools "Bash(git diff*),Bash(git log*),Bash(git show*),Read,Glob,Grep" --max-turns 15 2>/dev/null)
+
+stop_spinner
+
+echo "$REVIEW_OUTPUT"
 echo ""
 echo "--- Bug review complete ---"
