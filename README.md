@@ -5,287 +5,172 @@ A Telegram bot that goes beyond URL shortening — create link-in-bio pages, tra
 ## Features
 
 ### Core
-- **URL Shortening**: Convert long URLs into short, shareable links
-- **Advanced QR Code Generation**: Styled QR codes with 3 styles, 8 color schemes, and persistent user preferences
-- **URL Safety Check**: Verify URLs using Google Safe Browsing API + custom phishing heuristics
+- **URL Shortening**: Send any URL to instantly shorten it with inline keyboard actions
+- **Advanced QR Codes**: 3 styles, 8 color schemes, persistent preferences per user
+- **URL Safety**: Google Safe Browsing API + custom phishing heuristics with explainable risk reports
 
-### Link-in-Bio Mini Pages
-- **Create landing pages**: Build lightweight link-in-bio pages (like Linktree) right from Telegram
-- **Customizable**: Title, description, multiple buttons, preview image, expiration
-- **Editable**: Update your pages anytime via bot commands
+### Link-in-Bio Pages
+- **Create landing pages**: Build link-in-bio pages via guided `/bio` flow
+- **4 themes**: Light, dark, gradient, minimal — mobile-first HTML with OG tags
+- **Editable**: Update title, description, add/remove links via inline keyboards
 
 ### Analytics Dashboard
-- **Click tracking**: Total clicks, unique visitors (hashed IP+UA), top referrers, top countries
-- **QR scan tracking**: Automatic `?src=qr` parameter to distinguish QR scans from direct clicks
-- **Per-link stats**: Sparkline-style summaries for last 24h activity
-- **Export**: Download stats as CSV
+- **Click tracking**: Total clicks, unique visitors (SHA-256 hashed IP+UA), referrers, countries
+- **QR scan tracking**: Auto-appended `?src=qr` parameter for scan detection
+- **Bar chart**: 7-day sparkline in stats output
+- **CSV export**: Download per-link stats via `/export`
 
 ### Smart Link Previews
-- **Metadata extraction**: Auto-fetch title, site name, favicon when shortening
-- **Rich Telegram cards**: Display link info with domain, risk status, and action buttons
-- **OG image generation**: Professional-looking previews for shared short links
+- **Auto metadata**: Fetches og:title, og:description, og:image on shortening
+- **Rich response**: Title + domain + description + safety status + inline buttons
+- **Cached**: Metadata stored in KV with 7-day TTL
 
 ### Advanced Safety
-- **Explainable risk scoring**: Beyond binary safe/unsafe — see *why* a URL is flagged
-- **Phishing heuristics**: Punycode detection, lookalike domains, suspicious TLDs, URL length analysis
-- **Community reporting**: Submit suspicious links to a shared blocklist
+- **Heuristic analysis**: Punycode detection, lookalike domains (Levenshtein distance), suspicious TLDs, IP hostnames, excessive subdomains, @ tricks, URL length
+- **Community blocklist**: `/report` to flag domains, auto-flagged at 3+ reports
+- **Rate limited**: 10 reports per user per day
 
 ### Expiring & One-Time Links
-- **Time-based expiration**: Links that auto-expire after a set duration or date
-- **One-time links**: Self-destructing links that work exactly once
-- **Password protection**: Optional password gate before redirect
+- **Time-based expiration**: `/expire <code> 2h` or `/expire <code> 2026-03-01`
+- **One-time links**: `/onetime <url>` — self-destructs after one click
+- **410 Gone page**: Styled HTML page for expired/used links
 
 ### Inline Keyboard UX
-- **One-tap actions**: After shortening — [Copy] [QR] [Stats] [Edit] [Expire]
-- **Button pickers**: Style and color selection via inline keyboards instead of text commands
-- **Navigation**: Back buttons and flow-based interactions
+- **Post-shorten actions**: [QR Code] [Stats] [Expire] [Open Link]
+- **Button pickers**: Style and color selection via inline keyboards
+- **Help categories**: Tap-to-expand command categories
+- **Bio actions**: [View Page] [Edit] [Stats] [Share]
 
 ### Team / Workspace Mode
-- **Group chat workspaces**: Shared link pools per Telegram group
-- **Roles**: Admin and member permissions
-- **Workspace analytics**: Aggregated stats across all team links
+- **Group chat workspaces**: Auto-created when bot is used in groups
+- **Shared links**: Links created in groups are tracked per workspace
+- **Workspace stats**: Aggregated analytics across all workspace links
 
 ## Commands
 
 ### Basic
-- `/start` - Welcome message and feature overview
-- `/help` - Complete command reference and usage tips
+- `/start` — Welcome message and feature overview
+- `/help` — Command categories via inline keyboard
 
 ### URL Operations
-- `/shorten [url]` - Shorten a URL (or send any URL directly)
-- `/qrcode [url]` - Generate a styled QR code
-- `/checkurl [url]` - Check URL safety with detailed risk report
+- Send any URL — Shorten it with smart preview
+- `/qrcode [url]` — Generate styled QR code
+- `/checkurl [url]` — URL safety report with risk level
+- `/report <url>` — Report suspicious URL to community blocklist
 
 ### Link-in-Bio
-- `/bio` - Create a new link-in-bio page
-- `/edit <code>` - Edit a short link or bio page (title, description, buttons)
-- `/delete <code>` - Delete a short link or bio page
+- `/bio` — Interactive flow to create a bio page
+- `/edit <code>` — Edit a link or bio page
+- `/delete <code>` — Delete with confirmation
 
 ### Analytics
-- `/stats <code>` - View click analytics for a link
-- `/toplinks` - Your top 5 performing links
-- `/export <code>` - Export analytics as CSV
+- `/stats <code>` — Click analytics with bar chart
+- `/toplinks` — Your top 5 links by clicks
+- `/export <code>` — Download stats as CSV
 
 ### QR Code Customization
-- `/qrstyle` - Choose QR code style (square / rounded / dots)
-- `/qrcolor` - Select color scheme (8 options)
-- `/qrsettings` - View current QR preferences
-- `/qrpreview` - Preview all available styles
+- `/qrstyle` — Choose style via inline buttons
+- `/qrcolor` — Choose color scheme via inline buttons
+- `/qrsettings` — View current QR preferences
+- `/qrpreview` — Preview all styles
 
 ### Link Management
-- `/expire <code> <duration>` - Set expiration (e.g., `2h`, `7d`, `2026-03-01`)
-- `/onetime <url>` - Create a one-time self-destructing link
-- `/report <url>` - Report a suspicious URL to the community blocklist
+- `/expire <code> <duration>` — Set expiration (30m, 2h, 7d, or ISO date)
+- `/onetime <url>` — Create a one-time self-destructing link
 
 ### Workspace (Group Chats)
-- `/workspace` - View workspace info and shared links
-- `/workspace_stats` - Aggregated analytics for all workspace links
+- `/workspace` — View workspace info
+- `/workspace_stats` — Aggregated analytics
+
+## Architecture
+
+### Project Structure
+```
+src/
+  index.js                — ES module entry point, routing
+  handlers/
+    commands.js           — All /command handlers
+    callbacks.js          — Callback query (inline keyboard) handlers
+  services/
+    analytics.js          — Click tracking, stats aggregation, CSV export
+    bio.js                — Bio page CRUD + serving
+    safety.js             — Google Safe Browsing + heuristics + blocklist
+    links.js              — URL shortening, redirect with expiration
+    metadata.js           — OG metadata fetching + caching
+  utils/
+    kv.js                 — KV helpers with legacy migration
+    state.js              — KV-backed user state (replaces in-memory)
+    qr.js                 — QR code generation
+    preferences.js        — User QR preferences
+    keyboard.js           — Inline keyboard builders
+    helpers.js            — isValidUrl, generateShortCode, escapeHtml, parseDuration
+  templates/
+    bio-page.js           — Bio page HTML (4 themes)
+    expired-page.js       — 410 Gone HTML
+```
+
+### KV Data Model
+```
+link:{code}                           → { type, url, page?, createdBy, createdAt, expiresAt?, maxClicks?, currentClicks }
+stats:{code}:{YYYYMMDD}              → { clicks, uniques, referrers, countries, qrScans }
+pref:{chatId}                         → { style, colorScheme }
+state:{chatId}                        → { waitingFor, ...data }  (TTL: 1h)
+user:{chatId}                         → { links: [code, ...] }
+meta:{url}                            → { title, description, image, domain, fetchedAt }  (TTL: 7d)
+workspace:{chatId}                    → { name, admins, members, links }
+blocklist:{domain}                    → { reportedBy, reportedAt, reportCount }
+ratelimit:report:{chatId}:{YYYYMMDD} → count  (TTL: 24h)
+visitor:{code}:{hash}:{YYYYMMDD}     → "1"  (TTL: 24h)
+```
+
+### API Endpoints
+- `POST /webhook` — Telegram webhook
+- `GET /qrcode?url=<url>` — QR code image (PNG)
+- `GET /bio/{code}` — Bio page HTML
+- `GET /{code}` — Short URL redirect (301, tracks analytics)
 
 ## Setup
 
 ### Prerequisites
-
 - Cloudflare account
 - Telegram Bot Token (from [@BotFather](https://t.me/botfather))
 - Google Safe Browsing API Key
 - Bun (runtime & package manager)
-- ngrok (for local development)
 
 ### Installation
 
-1. **Clone the repository**
-   ```bash
-   git clone <your-repo-url>
-   cd cloudflare-telegram-bot
-   ```
-
-2. **Install dependencies**
-   ```bash
-   bun install
-   ```
-
-3. **Authenticate with Cloudflare**
-   ```bash
-   # Option A: Browser login (recommended)
-   bunx wrangler login
-
-   # Option B: API token (if browser login fails)
-   export CLOUDFLARE_API_TOKEN="your-api-token"
-   ```
-
-4. **Configure secrets (SECURE)**
-
-   **NEVER** put API keys in `wrangler.jsonc`. Use Wrangler secrets instead:
-   ```bash
-   echo "your-bot-token" | bunx wrangler secret put BOT_TOKEN
-   echo "your-google-api-key" | bunx wrangler secret put GOOGLE_API_KEY
-   ```
-
-5. **Set up KV namespace** (if not already created)
-   ```bash
-   bunx wrangler kv namespace create shorturl
-   ```
-
-   Update the namespace ID in `wrangler.jsonc` if needed.
-
-6. **Deploy to Cloudflare**
-   ```bash
-   bun run deploy
-   ```
-
-7. **Set Telegram webhook**
-   ```bash
-   curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
-   -H "Content-Type: application/json" \
-   -d '{"url": "https://your-worker-domain.workers.dev/webhook"}'
-   ```
-
-### Local Development
-
-1. **Start local development server**
-   ```bash
-   wrangler dev
-   ```
-
-2. **In another terminal, start ngrok**
-   ```bash
-   ngrok http 8787
-   ```
-
-3. **Set webhook to ngrok URL**
-   ```bash
-   curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
-   -H "Content-Type: application/json" \
-   -d '{"url": "https://your-ngrok-url.ngrok.io/webhook"}'
-   ```
-
-## Configuration
-
-### Secrets (Environment Variables)
-
-| Secret Name | Description | Required |
-|-------------|-------------|----------|
-| `BOT_TOKEN` | Your Telegram bot token from BotFather | Yes |
-| `GOOGLE_API_KEY` | Google Safe Browsing API key for URL safety checks | Yes |
-
-### KV Namespace
-
-The bot uses Cloudflare KV for all data storage:
-- Short links & bio pages
-- Click analytics counters
-- User preferences & workspace config
-- Community blocklist
-
-## API Endpoints
-
-- `GET /` - Default response / landing page
-- `POST /webhook` - Telegram webhook endpoint
-- `GET /qrcode?url=<url>` - Generate QR code image
-- `GET /bio/{code}` - Render link-in-bio page
-- `GET /{shortCode}` - Redirect to original URL (tracks analytics)
-
-## Architecture
-
-### Data Model (KV)
-
-```
-link:{code}     → { type, url, page?, createdBy, createdAt, expiresAt?, maxClicks?, passwordHash?, meta? }
-stats:{code}:{YYYYMMDD} → { clicks, uniques, referrers, countries, qrScans }
-user:{chatId}   → { preferences, links[], workspace? }
-workspace:{chatId} → { members[], admins[], links[] }
-blocklist:{domain} → { reportedBy, reportedAt, reason }
+```bash
+git clone <your-repo-url>
+cd cloudflare-telegram-bot
+bun install
 ```
 
-### Project Structure
-```
-├── src/
-│   └── index.js          # Main worker script
-├── docs/
-│   └── todo.md           # Implementation roadmap
-├── test/
-│   └── index.spec.js     # Test files
-├── package.json          # Dependencies
-├── wrangler.jsonc        # Cloudflare Worker configuration
-├── vitest.config.js      # Test configuration
-└── README.md             # This file
+### Configure Secrets
+```bash
+echo "your-bot-token" | bunx wrangler secret put BOT_TOKEN
+echo "your-google-api-key" | bunx wrangler secret put GOOGLE_API_KEY
 ```
 
-## Security Features
+### Deploy
+```bash
+bun run deploy
+```
 
-- **Google Safe Browsing API**: All URLs checked before processing
-- **Phishing heuristics**: Punycode, lookalike domain, suspicious TLD detection
-- **Explainable risk reports**: Users see *why* a URL was flagged
-- **Community blocklist**: Crowd-sourced suspicious URL reporting
-- **Malicious URL blocking**: Prevents shortening or QR code generation for harmful URLs
-- **Input validation**: Strict URL parsing and sanitization
+### Set Telegram Webhook
+```bash
+curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://your-worker-domain.workers.dev/webhook"}'
+```
 
 ## Development
 
-### Scripts
-- `bun run dev` - Start local development server
-- `bun run deploy` - Deploy to Cloudflare Workers
-- `bun run start` - Alias for dev
-- `bun test` - Run test suite with Vitest
-
-### Running Tests
 ```bash
-bun test
+bun run dev          # Start local dev server
+bun run deploy       # Deploy to Cloudflare Workers
+bun test             # Run tests
 ```
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Webhook not working**
-   - Check if webhook URL is correct
-   - Verify bot token is valid
-   - Ensure webhook is set to correct endpoint
-   - Check worker logs for errors
-
-2. **KV namespace errors**
-   - Verify namespace ID in wrangler.jsonc
-   - Check if namespace exists in Cloudflare dashboard
-
-3. **API key issues**
-   - Verify Google Safe Browsing API key is valid
-   - Check API quotas and limits
-
-4. **Worker hanging/crashing**
-   - Check if secrets are properly configured
-   - Verify environment variables are accessible
-   - Test worker endpoint directly
-
-### Debug Commands
-
-```bash
-# Check webhook status
-curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getWebhookInfo"
-
-# Test bot token
-curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getMe"
-
-# Test worker endpoint
-curl "https://your-worker-domain.workers.dev/"
-
-# Check worker logs
-wrangler tail --format pretty
-
-# List secrets
-bunx wrangler secret list
-```
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if needed
-5. Submit a pull request
 
 ## License
 
-This project is open source and available under the [MIT License](LICENSE).
-
----
-
-Built with Cloudflare Workers and Telegram Bot API.
+MIT
