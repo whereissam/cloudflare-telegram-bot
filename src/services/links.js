@@ -5,7 +5,14 @@ import { renderExpiredPage } from '../templates/expired-page.js';
 
 // Create a shortened link
 export async function createShortLink(originalUrl, chatId, env, request, options = {}) {
-  const code = generateShortCode();
+  // Generate unique code with collision check
+  let code;
+  for (let i = 0; i < 5; i++) {
+    code = generateShortCode();
+    const existing = await getLink(code, env);
+    if (!existing) break;
+    if (i === 4) throw new Error('Failed to generate unique short code');
+  }
   const baseUrl = getBaseUrl(request);
 
   const linkData = {
@@ -48,10 +55,17 @@ export async function handleRedirect(code, request, env, ctx) {
     });
   }
 
-  // Track click (non-blocking)
+  // For click-limited links, increment synchronously before redirect to reduce race window
+  if (link.maxClicks) {
+    link.currentClicks = (link.currentClicks || 0) + 1;
+    await putLink(code, link, env);
+  }
+
+  // Track analytics (non-blocking)
   const url = new URL(request.url);
   const isQrScan = url.searchParams.get('src') === 'qr';
-  ctx.waitUntil(trackClick(code, request, env, isQrScan));
+  ctx.waitUntil(trackClick(code, request, env, isQrScan, !!link.maxClicks));
 
-  return Response.redirect(link.url, 301);
+  // Use 302 so browsers don't permanently cache the redirect (allows editing destinations)
+  return Response.redirect(link.url, 302);
 }

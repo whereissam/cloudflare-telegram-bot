@@ -44,6 +44,10 @@ async function sendMessage(bot, chatId, text, replyMarkup, parseMode = 'Markdown
 }
 
 export async function handleCallback(callbackQuery, bot, env, request) {
+  if (!callbackQuery.message) {
+    await answer(bot, callbackQuery.id, 'Message no longer available');
+    return;
+  }
   const chatId = callbackQuery.message.chat.id;
   const messageId = callbackQuery.message.message_id;
   const data = callbackQuery.data;

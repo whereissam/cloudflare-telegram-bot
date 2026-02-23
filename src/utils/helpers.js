@@ -1,19 +1,20 @@
-// Validate URL string
+// Validate URL string (only http and https schemes allowed)
 export function isValidUrl(string) {
   try {
-    new URL(string);
-    return true;
+    const url = new URL(string);
+    return url.protocol === 'http:' || url.protocol === 'https:';
   } catch (_) {
     return false;
   }
 }
 
-// Generate random alphanumeric short code
+// Generate random alphanumeric short code using crypto
 export function generateShortCode(length = 6) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const bytes = crypto.getRandomValues(new Uint8Array(length));
   let result = '';
   for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+    result += chars.charAt(bytes[i] % chars.length);
   }
   return result;
 }
@@ -29,10 +30,10 @@ export function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
-// Get base URL from request
+// Get base URL from request (preserves port for local dev)
 export function getBaseUrl(request) {
   const url = new URL(request.url);
-  return `${url.protocol}//${url.hostname}`;
+  return `${url.protocol}//${url.host}`;
 }
 
 // Format number with commas

@@ -1,7 +1,8 @@
 import { todayKey } from '../utils/helpers.js';
 
 // Track a click on a short link (non-blocking, use with ctx.waitUntil)
-export async function trackClick(code, request, env, isQrScan = false) {
+// skipLinkIncrement: true if currentClicks was already incremented synchronously
+export async function trackClick(code, request, env, isQrScan = false, skipLinkIncrement = false) {
   const date = todayKey();
   const statsKey = `stats:${code}:${date}`;
 
@@ -50,14 +51,16 @@ export async function trackClick(code, request, env, isQrScan = false) {
 
   await env.shorturl.put(statsKey, JSON.stringify(stats));
 
-  // Also increment currentClicks on the link itself
-  const linkRaw = await env.shorturl.get(`link:${code}`);
-  if (linkRaw) {
-    try {
-      const link = JSON.parse(linkRaw);
-      link.currentClicks = (link.currentClicks || 0) + 1;
-      await env.shorturl.put(`link:${code}`, JSON.stringify(link));
-    } catch {}
+  // Increment currentClicks on the link itself (skip if already done synchronously)
+  if (!skipLinkIncrement) {
+    const linkRaw = await env.shorturl.get(`link:${code}`);
+    if (linkRaw) {
+      try {
+        const link = JSON.parse(linkRaw);
+        link.currentClicks = (link.currentClicks || 0) + 1;
+        await env.shorturl.put(`link:${code}`, JSON.stringify(link));
+      } catch {}
+    }
   }
 }
 

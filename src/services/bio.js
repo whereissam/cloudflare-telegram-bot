@@ -58,6 +58,9 @@ export async function updateBioPage(code, chatId, updates, env) {
   if (updates.description !== undefined) link.page.description = updates.description;
   if (updates.addButton) link.page.buttons.push(updates.addButton);
   if (updates.removeButtonIndex !== undefined) {
+    if (updates.removeButtonIndex < 0 || updates.removeButtonIndex >= link.page.buttons.length) {
+      return { ok: false, error: 'Invalid button index' };
+    }
     link.page.buttons.splice(updates.removeButtonIndex, 1);
   }
   if (updates.theme !== undefined) link.page.theme = updates.theme;

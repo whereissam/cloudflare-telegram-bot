@@ -85,14 +85,14 @@ export async function handleMessage(message, bot, env, request, ctx) {
 
 // --- State handler for multi-step flows ---
 async function handleState(state, chatId, text, bot, env, request) {
-  await clearUserState(chatId, env);
-
   switch (state.waitingFor) {
     case 'qr_url': {
       if (!isValidUrl(text)) {
+        await setUserState(chatId, state, env);
         await send(bot, chatId, 'Please provide a valid URL. Example: https://example.com');
         return;
       }
+      await clearUserState(chatId, env);
       const prefs = await getUserPreferences(chatId, env);
       try {
         await generateAdvancedQrCode(chatId, text, bot, env, prefs.style, prefs.colorScheme);
@@ -105,9 +105,11 @@ async function handleState(state, chatId, text, bot, env, request) {
 
     case 'check_url': {
       if (!isValidUrl(text)) {
+        await setUserState(chatId, state, env);
         await send(bot, chatId, 'Please provide a valid URL.');
         return;
       }
+      await clearUserState(chatId, env);
       await runCheckUrl(chatId, text, bot, env);
       return;
     }
@@ -163,9 +165,11 @@ async function handleState(state, chatId, text, bot, env, request) {
 
     case 'edit_url': {
       if (!isValidUrl(text)) {
+        await setUserState(chatId, state, env);
         await send(bot, chatId, 'Invalid URL.');
         return;
       }
+      await clearUserState(chatId, env);
       const link = await getLink(state.code, env);
       if (link && link.createdBy === chatId) {
         link.url = text;
@@ -178,12 +182,14 @@ async function handleState(state, chatId, text, bot, env, request) {
     }
 
     case 'edit_bio_title': {
+      await clearUserState(chatId, env);
       const result = await updateBioPage(state.code, chatId, { title: text }, env);
       await send(bot, chatId, result.ok ? `Title updated for \`${state.code}\`.` : `Error: ${result.error}`);
       return;
     }
 
     case 'edit_bio_desc': {
+      await clearUserState(chatId, env);
       const result = await updateBioPage(state.code, chatId, { description: text }, env);
       await send(bot, chatId, result.ok ? `Description updated for \`${state.code}\`.` : `Error: ${result.error}`);
       return;
@@ -192,15 +198,18 @@ async function handleState(state, chatId, text, bot, env, request) {
     case 'edit_bio_addlink': {
       const sep = text.indexOf('|');
       if (sep === -1) {
+        await setUserState(chatId, state, env);
         await send(bot, chatId, 'Use format: Label | URL');
         return;
       }
       const label = text.slice(0, sep).trim();
       const url = text.slice(sep + 1).trim();
       if (!isValidUrl(url)) {
+        await setUserState(chatId, state, env);
         await send(bot, chatId, 'Invalid URL.');
         return;
       }
+      await clearUserState(chatId, env);
       const result = await updateBioPage(state.code, chatId, { addButton: { label, url } }, env);
       await send(bot, chatId, result.ok ? `Link added to \`${state.code}\`.` : `Error: ${result.error}`);
       return;
@@ -209,9 +218,11 @@ async function handleState(state, chatId, text, bot, env, request) {
     case 'edit_bio_rmlink': {
       const idx = parseInt(text) - 1;
       if (isNaN(idx) || idx < 0) {
+        await setUserState(chatId, state, env);
         await send(bot, chatId, 'Invalid number.');
         return;
       }
+      await clearUserState(chatId, env);
       const result = await updateBioPage(state.code, chatId, { removeButtonIndex: idx }, env);
       await send(bot, chatId, result.ok ? `Link removed from \`${state.code}\`.` : `Error: ${result.error}`);
       return;
@@ -220,9 +231,11 @@ async function handleState(state, chatId, text, bot, env, request) {
     case 'expire_input': {
       const expiresAt = parseDuration(text);
       if (!expiresAt) {
-        await send(bot, chatId, 'Invalid duration. Examples: 30m, 2h, 7d, 2026-03-01');
+        await setUserState(chatId, state, env);
+        await send(bot, chatId, 'Invalid duration. Examples: 30m, 2h, 7d, YYYY-MM-DD');
         return;
       }
+      await clearUserState(chatId, env);
       const link = await getLink(state.code, env);
       if (link && link.createdBy === chatId) {
         link.expiresAt = expiresAt;
@@ -349,6 +362,10 @@ async function handleStats(chatId, args, bot, env) {
     await send(bot, chatId, 'Link not found.');
     return;
   }
+  if (link.createdBy && link.createdBy !== chatId) {
+    await send(bot, chatId, 'You do not own this link.');
+    return;
+  }
 
   const stats = await getStats(code, env, 7);
   const chart = buildBarChart(stats.dailyClicks);
@@ -407,6 +424,10 @@ async function handleExport(chatId, args, bot, env) {
   const link = await getLink(code, env);
   if (!link) {
     await send(bot, chatId, 'Link not found.');
+    return;
+  }
+  if (link.createdBy && link.createdBy !== chatId) {
+    await send(bot, chatId, 'You do not own this link.');
     return;
   }
 
@@ -483,13 +504,13 @@ async function handleExpire(chatId, args, bot, env) {
 
   if (!duration) {
     await setUserState(chatId, { waitingFor: 'expire_input', code }, env);
-    await send(bot, chatId, 'Send the expiration duration (e.g., 30m, 2h, 7d) or a date (2026-03-01):');
+    await send(bot, chatId, 'Send the expiration duration (e.g., 30m, 2h, 7d) or a date (YYYY-MM-DD):');
     return;
   }
 
   const expiresAt = parseDuration(duration);
   if (!expiresAt) {
-    await send(bot, chatId, 'Invalid duration. Examples: 30m, 2h, 7d, 2026-03-01');
+    await send(bot, chatId, 'Invalid duration. Examples: 30m, 2h, 7d, YYYY-MM-DD');
     return;
   }
 
@@ -505,8 +526,8 @@ async function handleOneTime(chatId, args, bot, env, request) {
     return;
   }
 
-  const safetyCheck = await checkUrlSafety(args, env);
-  if (!safetyCheck.safe) {
+  const safetyResult = await fullSafetyCheck(args, env);
+  if (safetyResult.level === 'dangerous') {
     await send(bot, chatId, 'This URL was flagged as potentially harmful. One-time link not created.');
     return;
   }
@@ -555,7 +576,7 @@ async function handleWorkspace(message, bot, env) {
   }
 
   await send(bot, chatId,
-    `*Workspace: ${ws.name}*\n\n` +
+    `*Workspace: ${escapeMd(ws.name)}*\n\n` +
     `Members: ${ws.members.length}\n` +
     `Links: ${ws.links.length}\n\n` +
     'All links created in this group are shared with the workspace.');
@@ -643,7 +664,7 @@ async function shortenUrl(chatId, originalUrl, bot, env, request, ctx, message) 
     text += `*${escapeMd(meta.title)}*\n`;
   }
   if (meta?.domain) {
-    text += `${meta.domain}\n`;
+    text += `${escapeMd(meta.domain)}\n`;
   }
   if (meta?.description) {
     const desc = meta.description.length > 100 ? meta.description.slice(0, 100) + '...' : meta.description;
