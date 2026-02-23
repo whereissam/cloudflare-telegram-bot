@@ -1,5 +1,4 @@
 import TelegramBot from 'telegram-webhook-js';
-import QRCodeStyling from 'qr-code-styling';
 
 // Store user states (for multi-step interactions) 
 const userStates = {};
@@ -22,8 +21,7 @@ const COLOR_SCHEMES = {
     pink: { name: '🩷 Soft Pink', foreground: '#be185d', background: '#fdf2f8', accent: '#ec4899' }
 };
 
-// User preferences storage
-const userPreferences = {};
+// User preferences are stored in KV (shorturl binding) with key prefix "pref:"
 
 addEventListener('fetch', event => {
     event.respondWith(handleRequest(event.request));
@@ -157,123 +155,43 @@ async function checkUrlSafety(url) {
     }
 }
 
-// Get QR code configuration based on style and colors
-function getQRCodeConfig(style, colorScheme, url, size = 512) {
-    const colors = COLOR_SCHEMES[colorScheme] || COLOR_SCHEMES.classic;
-    
-    const baseConfig = {
-        width: size,
-        height: size,
-        margin: 10,
-        data: url,
-        qrOptions: {
-            typeNumber: 0,
-            mode: 'Byte',
-            errorCorrectionLevel: 'M'
-        },
-        backgroundOptions: {
-            color: colors.background
-        }
-    };
-
-    switch (style) {
-        case 'rounded':
-            return {
-                ...baseConfig,
-                dotsOptions: {
-                    color: colors.foreground,
-                    type: 'rounded'
-                },
-                cornersSquareOptions: {
-                    color: colors.accent || colors.foreground,
-                    type: 'extra-rounded'
-                },
-                cornersDotOptions: {
-                    color: colors.accent || colors.foreground,
-                    type: 'dot'
-                }
-            };
-        case 'dots':
-            return {
-                ...baseConfig,
-                dotsOptions: {
-                    color: colors.foreground,
-                    type: 'dots'
-                },
-                cornersSquareOptions: {
-                    color: colors.accent || colors.foreground,
-                    type: 'extra-rounded'
-                },
-                cornersDotOptions: {
-                    color: colors.accent || colors.foreground,
-                    type: 'dot'
-                }
-            };
-        default: // square
-            return {
-                ...baseConfig,
-                dotsOptions: {
-                    color: colors.foreground,
-                    type: 'square'
-                },
-                cornersSquareOptions: {
-                    color: colors.accent || colors.foreground,
-                    type: 'square'
-                },
-                cornersDotOptions: {
-                    color: colors.accent || colors.foreground,
-                    type: 'square'
-                }
-            };
-    }
-}
-
-// Generate advanced QR code
-async function generateAdvancedQrCode(chatId, urlToEncode, bot, style = 'square', colorScheme = 'classic') {
+// Generate advanced QR code using external API with color support
+async function generateAdvancedQrCode(chatId, urlToEncode, bot, style = 'square', colorScheme = 'classic', { skipSafetyCheck = false } = {}) {
     try {
-        // Check URL safety first
-        const safetyCheck = await checkUrlSafety(urlToEncode);
-        
-        if (!safetyCheck.safe) {
-            await bot.sendMessage(chatId, '⚠️ Warning: This URL has been identified as potentially harmful. QR code generation cancelled for your safety.');
-            return;
+        // Check URL safety first (skip for known-safe URLs like previews)
+        if (!skipSafetyCheck) {
+            const safetyCheck = await checkUrlSafety(urlToEncode);
+
+            if (!safetyCheck.safe) {
+                await bot.sendMessage(chatId, '⚠️ Warning: This URL has been identified as potentially harmful. QR code generation cancelled for your safety.');
+                return;
+            }
         }
 
-        const config = getQRCodeConfig(style, colorScheme, urlToEncode);
-        const qrCode = new QRCodeStyling(config);
-        
-        // Generate QR code as buffer
-        const qrBuffer = await qrCode.getRawData('png');
-        
-        if (!qrBuffer) {
-            throw new Error('Failed to generate QR code buffer');
-        }
+        const colors = COLOR_SCHEMES[colorScheme] || COLOR_SCHEMES.classic;
+        const fgColor = colors.foreground.replace('#', '');
+        const bgColor = colors.background.replace('#', '');
 
-        // Convert buffer to base64 for Telegram
-        const base64QR = Buffer.from(qrBuffer).toString('base64');
-        const dataUri = `data:image/png;base64,${base64QR}`;
-        
-        // Send to Telegram
+        const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(urlToEncode)}&color=${fgColor}&bgcolor=${bgColor}`;
+
         const response = await fetch(`https://api.telegram.org/bot${bot.token}/sendPhoto`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 chat_id: chatId,
-                photo: dataUri,
-                caption: `🎨 ${QR_STYLES[style]?.name || 'Custom'} QR Code\n🎨 Style: ${COLOR_SCHEMES[colorScheme]?.name || 'Custom Colors'}\n🔗 URL: ${urlToEncode}`
+                photo: qrApiUrl,
+                caption: `🎨 ${QR_STYLES[style]?.name || 'Custom'} QR Code\n🌈 Colors: ${COLOR_SCHEMES[colorScheme]?.name || 'Custom'}\n🔗 URL: ${urlToEncode}`
             })
         });
-        
+
         const result = await response.json();
         if (!result.ok) {
             throw new Error(result.description || 'Failed to send QR code');
         }
-        
+
     } catch (error) {
         console.error('Failed to generate advanced QR code:', error);
         await bot.sendMessage(chatId, '❌ Error generating styled QR code. Falling back to basic version...');
-        
-        // Fallback to basic QR code
         await generateBasicQrCode(chatId, urlToEncode, bot);
     }
 }
@@ -303,14 +221,26 @@ async function generateBasicQrCode(chatId, urlToEncode, bot) {
     }
 }
 
-// Get user preferences
-function getUserPreferences(chatId) {
-    return userPreferences[chatId] || { style: 'square', colorScheme: 'classic' };
+// Get user preferences from KV
+async function getUserPreferences(chatId) {
+    try {
+        const data = await shorturl.get(`pref:${chatId}`);
+        if (data) {
+            return JSON.parse(data);
+        }
+    } catch (error) {
+        console.error('Error reading user preferences:', error);
+    }
+    return { style: 'square', colorScheme: 'classic' };
 }
 
-// Set user preferences
-function setUserPreferences(chatId, style, colorScheme) {
-    userPreferences[chatId] = { style, colorScheme };
+// Set user preferences in KV
+async function setUserPreferences(chatId, style, colorScheme) {
+    try {
+        await shorturl.put(`pref:${chatId}`, JSON.stringify({ style, colorScheme }));
+    } catch (error) {
+        console.error('Error saving user preferences:', error);
+    }
 }
 
 // Check URL and report safety status to user
@@ -387,12 +317,11 @@ async function handleUpdate(update, request, bot) {
     // Handle user in waiting-for-url state
     if (userStates[chatId]) {
         const state = userStates[chatId];
-        // Clear the state
-        delete userStates[chatId];
-        
+
         if (state.waitingFor === 'qr_url') {
+            delete userStates[chatId];
             if (isValidUrl(text)) {
-                const prefs = getUserPreferences(chatId);
+                const prefs = await getUserPreferences(chatId);
                 await generateAdvancedQrCode(chatId, text, bot, prefs.style, prefs.colorScheme);
             } else {
                 await bot.sendMessage(chatId, 'Please provide a valid URL. Example: https://example.com');
@@ -401,9 +330,10 @@ async function handleUpdate(update, request, bot) {
         } else if (state.waitingFor === 'qr_style') {
             const styleKey = text.toLowerCase();
             if (QR_STYLES[styleKey]) {
-                const prefs = getUserPreferences(chatId);
-                setUserPreferences(chatId, styleKey, prefs.colorScheme);
-                await bot.sendMessage(chatId, `✅ QR code style set to: ${QR_STYLES[styleKey].name}\\nNow send a URL or use /qrcode to generate a styled QR code!`);
+                delete userStates[chatId];
+                const prefs = await getUserPreferences(chatId);
+                await setUserPreferences(chatId, styleKey, prefs.colorScheme);
+                await bot.sendMessage(chatId, `✅ QR code style set to: ${QR_STYLES[styleKey].name}\nNow send a URL or use /qrcode to generate a styled QR code!`);
             } else {
                 await bot.sendMessage(chatId, '❌ Invalid style. Please choose: square, rounded, or dots');
             }
@@ -411,14 +341,16 @@ async function handleUpdate(update, request, bot) {
         } else if (state.waitingFor === 'qr_color') {
             const colorKey = text.toLowerCase();
             if (COLOR_SCHEMES[colorKey]) {
-                const prefs = getUserPreferences(chatId);
-                setUserPreferences(chatId, prefs.style, colorKey);
-                await bot.sendMessage(chatId, `🎨 QR code color scheme set to: ${COLOR_SCHEMES[colorKey].name}\\nNow send a URL or use /qrcode to generate a styled QR code!`);
+                delete userStates[chatId];
+                const prefs = await getUserPreferences(chatId);
+                await setUserPreferences(chatId, prefs.style, colorKey);
+                await bot.sendMessage(chatId, `🎨 QR code color scheme set to: ${COLOR_SCHEMES[colorKey].name}\nNow send a URL or use /qrcode to generate a styled QR code!`);
             } else {
                 await bot.sendMessage(chatId, '❌ Invalid color scheme. Please choose from: classic, blue, green, purple, red, orange, teal, pink');
             }
             return;
         } else if (state.waitingFor === 'check_url') {
+            delete userStates[chatId];
             if (isValidUrl(text)) {
                 await checkAndReportUrlSafety(chatId, text, bot);
             } else {
@@ -445,7 +377,7 @@ async function handleUpdate(update, request, bot) {
             return;
         }
         
-        const prefs = getUserPreferences(chatId);
+        const prefs = await getUserPreferences(chatId);
         await generateAdvancedQrCode(chatId, urlToEncode, bot, prefs.style, prefs.colorScheme);
         return;
     }
@@ -455,9 +387,9 @@ async function handleUpdate(update, request, bot) {
         userStates[chatId] = { waitingFor: 'qr_style' };
         let styleList = '';
         Object.entries(QR_STYLES).forEach(([key, style]) => {
-            styleList += `• *${key}* - ${style.name}\\n`;
+            styleList += `• *${key}* - ${style.name}\n`;
         });
-        await bot.sendMessage(chatId, `🎨 Choose your QR code style:\\n\\n${styleList}\\nSend the style name (e.g., "rounded"):`, { parse_mode: 'Markdown' });
+        await bot.sendMessage(chatId, `🎨 Choose your QR code style:\n\n${styleList}\nSend the style name (e.g., "rounded"):`, { parse_mode: 'Markdown' });
         return;
     }
 
@@ -466,24 +398,24 @@ async function handleUpdate(update, request, bot) {
         userStates[chatId] = { waitingFor: 'qr_color' };
         let colorList = '';
         Object.entries(COLOR_SCHEMES).forEach(([key, scheme]) => {
-            colorList += `• *${key}* - ${scheme.name}\\n`;
+            colorList += `• *${key}* - ${scheme.name}\n`;
         });
-        await bot.sendMessage(chatId, `🌈 Choose your QR code color scheme:\\n\\n${colorList}\\nSend the scheme name (e.g., "blue"):`, { parse_mode: 'Markdown' });
+        await bot.sendMessage(chatId, `🌈 Choose your QR code color scheme:\n\n${colorList}\nSend the scheme name (e.g., "blue"):`, { parse_mode: 'Markdown' });
         return;
     }
 
     // Handle QR settings display
     if (text === '/qrsettings' || text === '/qr_settings') {
-        const prefs = getUserPreferences(chatId);
+        const prefs = await getUserPreferences(chatId);
         const currentStyle = QR_STYLES[prefs.style]?.name || 'Unknown';
         const currentColor = COLOR_SCHEMES[prefs.colorScheme]?.name || 'Unknown';
-        
-        await bot.sendMessage(chatId, 
-            `⚙️ *Your Current QR Settings:*\\n\\n` +
-            `🎨 Style: ${currentStyle}\\n` +
-            `🌈 Colors: ${currentColor}\\n\\n` +
-            `Use /qrstyle to change style\\n` +
-            `Use /qrcolor to change colors`, 
+
+        await bot.sendMessage(chatId,
+            `⚙️ *Your Current QR Settings:*\n\n` +
+            `🎨 Style: ${currentStyle}\n` +
+            `🌈 Colors: ${currentColor}\n\n` +
+            `Use /qrstyle to change style\n` +
+            `Use /qrcolor to change colors`,
             { parse_mode: 'Markdown' }
         );
         return;
@@ -495,11 +427,11 @@ async function handleUpdate(update, request, bot) {
         await bot.sendMessage(chatId, '🔮 Generating style previews... This may take a moment!');
         
         // Generate preview for each style with current color scheme
-        const prefs = getUserPreferences(chatId);
-        
+        const prefs = await getUserPreferences(chatId);
+
         for (const [styleKey, styleInfo] of Object.entries(QR_STYLES)) {
             try {
-                await generateAdvancedQrCode(chatId, sampleUrl, bot, styleKey, prefs.colorScheme);
+                await generateAdvancedQrCode(chatId, sampleUrl, bot, styleKey, prefs.colorScheme, { skipSafetyCheck: true });
                 await new Promise(resolve => setTimeout(resolve, 500)); // Small delay between sends
             } catch (error) {
                 console.error(`Preview failed for ${styleKey}:`, error);
@@ -537,35 +469,35 @@ async function handleUpdate(update, request, bot) {
 
     // Default responses
     if (text === '/start') {
-        await bot.sendMessage(chatId, 
-            '🤖 *Welcome to Enhanced URL Shortener & QR Code Bot!*\\n\\n' +
-            '✨ *Features:*\\n' +
-            '• 📎 Send any URL to shorten it\\n' +
-            '• 🎨 Generate styled QR codes with custom colors & shapes\\n' +
-            '• 🛡️ URL safety checking\\n' +
-            '• 🎭 Multiple QR code styles (square, rounded, dots)\\n' +
-            '• 🌈 8 beautiful color schemes\\n\\n' +
-            '🚀 *Quick Start:*\\n' +
-            '• Use /qrcode to create styled QR codes\\n' +
-            '• Use /qrsettings to customize your style\\n' +
+        await bot.sendMessage(chatId,
+            '🤖 *Welcome to Enhanced URL Shortener & QR Code Bot!*\n\n' +
+            '✨ *Features:*\n' +
+            '• 📎 Send any URL to shorten it\n' +
+            '• 🎨 Generate styled QR codes with custom colors & shapes\n' +
+            '• 🛡️ URL safety checking\n' +
+            '• 🎭 Multiple QR code styles (square, rounded, dots)\n' +
+            '• 🌈 8 beautiful color schemes\n\n' +
+            '🚀 *Quick Start:*\n' +
+            '• Use /qrcode to create styled QR codes\n' +
+            '• Use /qrsettings to customize your style\n' +
             '• Use /help for all commands',
             { parse_mode: 'Markdown' }
         );
     } else if (text === '/help') {
-        await bot.sendMessage(chatId, 
-            '📖 *Available Commands:*\\n\\n' +
-            '🔗 *URL Operations:*\\n' +
-            '• /qrcode - Generate styled QR code\\n' +
-            '• /checkurl - Check URL safety\\n' +
-            '• Send any URL to shorten it\\n\\n' +
-            '🎨 *QR Code Customization:*\\n' +
-            '• /qrstyle - Change QR code style\\n' +
-            '• /qrcolor - Change color scheme\\n' +
-            '• /qrsettings - View current settings\\n' +
-            '• /qrpreview - Preview all styles\\n\\n' +
-            '💡 *Tips:*\\n' +
-            '• Use /qrcode <url> for instant generation\\n' +
-            '• Customize once, use forever!\\n' +
+        await bot.sendMessage(chatId,
+            '📖 *Available Commands:*\n\n' +
+            '🔗 *URL Operations:*\n' +
+            '• /qrcode - Generate styled QR code\n' +
+            '• /checkurl - Check URL safety\n' +
+            '• Send any URL to shorten it\n\n' +
+            '🎨 *QR Code Customization:*\n' +
+            '• /qrstyle - Change QR code style\n' +
+            '• /qrcolor - Change color scheme\n' +
+            '• /qrsettings - View current settings\n' +
+            '• /qrpreview - Preview all styles\n\n' +
+            '💡 *Tips:*\n' +
+            '• Use /qrcode <url> for instant generation\n' +
+            '• Customize once, use forever!\n' +
             '• All QR codes include URL safety checks',
             { parse_mode: 'Markdown' }
         );
